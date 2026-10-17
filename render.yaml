@@ -1,0 +1,12 @@
+# Blueprint do Render — cria o serviço web com um clique (New + → Blueprint)
+services:
+  - type: web
+    name: sequenc
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: MONGODB_URI
+        sync: false
