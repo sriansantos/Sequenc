@@ -280,6 +280,18 @@ function loadDraft() {
   } catch (e) { /* rascunho corrompido: ignora */ }
 }
 
+// Conserta rascunhos de sessões antigas: academia que não existe mais
+// (ex.: servidor demo reiniciado) volta a apontar para uma academia válida
+function repairDraft() {
+  const d = state.draft;
+  if (!d) return;
+  if (!state.gyms.some((g) => g.id === d.gymId)) {
+    d.gymId = state.gymId || state.gyms[0]?.id || '';
+    d.gymName = gymName(d.gymId);
+    saveDraft();
+  }
+}
+
 function startWorkout(fromWorkout = null) {
   // Academia: a do treino repetido, ou a selecionada; fallback para a primeira
   let gymId = fromWorkout ? fromWorkout.gymId : state.gymId;
@@ -492,6 +504,7 @@ async function saveGym() {
 
 // ---------- Sheet: seletor de exercícios ----------
 function openPickerSheet() {
+  repairDraft(); // academia do treino pode ter deixado de existir
   sheetState.addedIds = new Set((state.draft?.items || []).map((i) => i.exerciseId));
   const gymLabel = state.draft?.gymName || 'Todas as academias';
   const body = `
@@ -1191,6 +1204,7 @@ window.addEventListener('online', () => syncQueue());
     fillFromDataCache();
     showToast('Você está offline — mostrando os dados salvos no aparelho.');
   }
+  repairDraft();
   renderAll();
   syncQueue();
   if ('serviceWorker' in navigator) {
