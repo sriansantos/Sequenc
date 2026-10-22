@@ -5,8 +5,10 @@ Tema preto com laranja claro, feito para o **iPhone** (instala na Tela de Iníci
 
 ## Funcionalidades
 
+- **Login / contas**: cada pessoa cria seu usuário e senha na primeira tela. Cada conta tem academias, exercícios, treinos e histórico próprios — dá para compartilhar o app com um colega sem misturar os dados.
 - **Academias**: cadastre os lugares onde treina (2 ou 3 academias, por exemplo). Escolhe onde vai treinar antes de iniciar, e exercícios, histórico e estatísticas ficam separados por academia.
 - **Treino**: inicie um treino, adicione exercícios, registre peso × repetições por série e finalize. O treino em andamento fica salvo no celular mesmo se você fechar a página.
+- **Evolução**: no detalhe de cada exercício (aba Exercícios), um gráfico mostra a subida da melhor carga treino a treino.
 - **Última carga**: ao escolher um exercício, o app mostra a carga da última vez ("última: 40 kg × 10").
 - **Repetir último treino**: recria o treino anterior com as mesmas séries para ajustar e evoluir.
 - **Exercícios**: lista padrão com 34 exercícios comuns (editável) agrupados por músculo; cada academia tem sua própria lista. Adicione, renomeie e exclua os seus.
@@ -77,11 +79,15 @@ render.yaml          → blueprint de deploy do Render
 
 | Método | Rota | Descrição |
 |---|---|---|
-| GET | `/api/gyms` | lista academias |
-| POST | `/api/gyms` | cria academia `{name}` |
+| POST | `/api/auth/register` | cria conta `{username, password}` (já vem com academia + lista básica) |
+| POST | `/api/auth/login` | entra `{username, password}` → token |
+| GET | `/api/auth/me` | valida sessão |
+| POST | `/api/auth/logout` | encerra sessão |
+| GET | `/api/gyms` | lista academias da conta |
+| POST | `/api/gyms` | cria academia `{name, seed?}` (seed = copiar lista básica) |
 | PUT | `/api/gyms/:id` | renomeia academia |
 | DELETE | `/api/gyms/:id` | exclui academia (exercícios migram para a mais antiga) |
-| GET | `/api/exercises` | lista exercícios |
+| GET | `/api/exercises` | lista exercícios da conta |
 | POST | `/api/exercises` | cria exercício `{name, group}` |
 | PUT | `/api/exercises/:id` | renomeia / muda grupo |
 | DELETE | `/api/exercises/:id` | exclui exercício |

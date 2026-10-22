@@ -16,6 +16,14 @@ const DRAFT_KEY = 'sequenc.draft.v1';
 const GYM_KEY = 'sequenc.gym.v1';
 const QUEUE_KEY = 'sequenc.queue.v1';
 const DATA_CACHE_KEY = 'sequenc.data.v1';
+const TOKEN_KEY = 'sequenc.token.v1';
+
+function getToken() {
+  try { return localStorage.getItem(TOKEN_KEY) || ''; } catch (e) { return ''; }
+}
+function setToken(t) {
+  try { t ? localStorage.setItem(TOKEN_KEY, t) : localStorage.removeItem(TOKEN_KEY); } catch (e) { /* ignore */ }
+}
 
 const ICONS = {
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
@@ -49,11 +57,12 @@ const state = {
   lastPerf: new Map(), // exerciseId -> { date, sets }
   draft: null,
   demo: false,
+  username: '',
   flashId: null,
   pendingId: null,
 };
 
-const sheetState = { editId: null, group: 'Outros', addedIds: new Set(), gymId: null, editGymId: null };
+const sheetState = { editId: null, group: 'Outros', addedIds: new Set(), gymId: null, editGymId: null, showAll: false };
 
 // ---------- Helpers ----------
 const $ = (s) => document.querySelector(s);
@@ -111,6 +120,7 @@ function elapsed(ms) {
 
 async function api(url, opts = {}) {
   const init = { cache: 'no-store', headers: { 'Content-Type': 'application/json' }, ...opts };
+  if (getToken()) init.headers.Authorization = 'Bearer ' + getToken();
   // timeout: em rede pendurada (sem sinal), falha rápido e cai no modo offline
   if (!init.signal && typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
     init.signal = AbortSignal.timeout(6000);
@@ -392,25 +402,49 @@ function openNewExerciseSheet(editId = null) {
   setTimeout(() => $('#new-ex-name')?.focus(), 380);
 }
 
-function exerciseSessions(id) {
+function exerciseSessions(id, max = 5) {
   const out = [];
   for (const w of state.workouts) {
     for (const it of w.items || []) {
       if (it.exerciseId === id) {
         out.push({ date: w.date, sets: it.sets || [] });
-        if (out.length >= 5) return out;
+        if (out.length >= max) return out;
       }
     }
   }
   return out;
 }
 
+// Gráfico simples de linha (SVG) com a melhor carga de cada treino
+function sparkline(values) {
+  if (!values || values.length < 2) return '';
+  const w = 300, h = 84, p = 8;
+  const min = Math.min(...values), max = Math.max(...values);
+  const span = (max - min) || 1;
+  const step = (w - 2 * p) / (values.length - 1);
+  const pts = values.map((v, i) => [p + i * step, h - p - ((v - min) / span) * (h - 2 * p)]);
+  const line = pts.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  const [lx, ly] = pts[pts.length - 1];
+  const [fx, fy] = pts[0];
+  return `
+    <svg class="spark" viewBox="0 0 ${w} ${h}" preserveAspectRatio="none" aria-hidden="true">
+      <polyline points="${line}" fill="none" stroke="#FFA14A" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="${fx}" cy="${fy}" r="3.5" fill="#6B6B74"/>
+      <circle cx="${lx}" cy="${ly}" r="4.5" fill="#FFA14A" stroke="#0B0B0D" stroke-width="2"/>
+    </svg>`;
+}
+
 function openExerciseDetailSheet(id) {
   const ex = state.exercises.find((e) => e.id === id);
   if (!ex) return;
-  const sessions = exerciseSessions(id);
+  const sessions = exerciseSessions(id, 12);
+  const chart = sparkline(sessions.map((s) => {
+    const b = (s.sets || []).slice().sort((a, b) => (b.weight - a.weight) || (b.reps - a.reps))[0];
+    return b ? b.weight : 0;
+  }).reverse()); // do mais antigo ao mais recente
+
   const rows = sessions.length
-    ? sessions.map((s) => {
+    ? sessions.slice(0, 5).map((s) => {
         const best = s.sets.slice().sort((a, b) => (b.weight - a.weight) || (b.reps - a.reps))[0];
         return `<div class="detail-row">
           <div class="d-left">${fmtDateShort(s.date)} <span class="d-date">${relTime(s.date)}</span></div>
@@ -423,7 +457,15 @@ function openExerciseDetailSheet(id) {
       <span class="g-dot" style="background:${GROUP_COLORS[ex.group] || GROUP_COLORS['Outros']}"></span>
       <span style="font-size:13.5px;color:var(--muted);font-weight:600">${esc(ex.group)}</span>
     </div>
-    <div class="sec-title" style="margin-top:0">Últimos treinos</div>
+    ${chart ? `
+    <div class="sec-title" style="margin-top:0">Evolução · melhor carga</div>
+    <div class="card" style="padding:12px 12px 8px">${chart}
+      <div style="display:flex;justify-content:space-between;font-size:11px;color:var(--faint);font-weight:600;padding:2px 2px 4px">
+        <span>há ${sessions.length} treino${sessions.length > 1 ? 's' : ''}</span>
+        <span style="color:var(--accent)">hoje: ${fmtKg((sessions[0].sets || []).slice().sort((a, b) => b.weight - a.weight)[0]?.weight || 0)} kg</span>
+      </div>
+    </div>` : ''}
+    <div class="sec-title">Últimos treinos</div>
     <div class="detail-rows">${rows}</div>
     <button class="btn-ghost" data-action="ex-edit" data-arg="${esc(id)}" style="margin-top:14px">
       <span style="display:flex;align-items:center;justify-content:center;gap:8px">${icon('edit')} Renomear</span>
@@ -461,6 +503,7 @@ function renderGymsSheet() {
       <label class="field-label">${editing ? 'Renomear academia' : 'Nova academia'}</label>
       <input class="field-input" id="gym-name" placeholder="Ex.: Smart Fit, CrossFit Box, Casa"
              value="${editing ? esc(editing.name) : ''}" maxlength="40" enterkeyhint="done">
+      ${editing ? '' : '<label class="seed-row"><input type="checkbox" id="gym-seed" checked> Copiar lista básica de exercícios</label>'}
       <button class="btn-primary" data-action="save-gym">${editing ? 'Salvar alterações' : 'Adicionar academia'}</button>
       ${editing ? '<button class="btn-ghost" data-action="gym-edit-cancel" style="margin-top:10px">Cancelar edição</button>' : ''}
       <label class="field-label" style="margin-top:18px">Suas academias (${state.gyms.length})</label>
@@ -489,10 +532,12 @@ async function saveGym() {
       showToast('Academia renomeada.', true);
       sheetState.editGymId = null;
     } else {
-      const created = await api('/api/gyms', { method: 'POST', body: JSON.stringify({ name }) });
+      const seed = $('#gym-seed')?.checked ?? false;
+      const created = await api('/api/gyms', { method: 'POST', body: JSON.stringify({ name, seed }) });
       state.gyms.push(created);
       selectGym(created.id);
-      showToast('Academia adicionada.', true);
+      showToast(seed ? 'Academia criada com a lista básica.' : 'Academia adicionada.', true);
+      await Promise.all([loadGyms(), loadExercises()]); // novas academias podem ter ganho exercícios
     }
     state.gyms.sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
     renderGymsSheet();
@@ -506,6 +551,7 @@ async function saveGym() {
 function openPickerSheet() {
   repairDraft(); // academia do treino pode ter deixado de existir
   sheetState.addedIds = new Set((state.draft?.items || []).map((i) => i.exerciseId));
+  sheetState.showAll = false;
   const gymLabel = state.draft?.gymName || 'Todas as academias';
   const body = `
     <div style="margin:0 2px 10px"><span class="chip">${esc(gymLabel)}</span></div>
@@ -525,14 +571,22 @@ function renderPickerList(q) {
   const draft = state.draft;
   // mostra apenas exercícios da academia do treino em andamento
   const gymOk = draft && state.gyms.some((g) => g.id === draft.gymId);
-  const pool = state.exercises.filter((e) => !draft || !gymOk || e.gymId === draft.gymId);
+  const pool = state.exercises.filter((e) => !draft || sheetState.showAll || !gymOk || e.gymId === draft.gymId);
   const list = pool.filter((e) => !term || e.name.toLowerCase().includes(term));
   const host = $('#picker-list');
   if (!host) return;
+  if (!pool.length && gymOk && !sheetState.showAll) {
+    // academia do treino sem nenhum exercício cadastrado
+    host.innerHTML = `
+      <div class="empty">${icon('dumbbell')}
+        <p>Nenhum exercício cadastrado em<br><b>${esc(draft.gymName || 'esta academia')}</b> ainda.</p>
+        <button class="btn-ghost" data-action="picker-show-all" style="width:auto;padding:0 20px;margin:12px auto 0;display:flex;align-items:center;gap:8px">Usar todos os exercícios</button>
+        <p style="font-size:12px;color:var(--faint);margin-top:12px">Depois cadastre os equipamentos<br>de cada academia na aba Exercícios.</p>
+      </div>`;
+    return;
+  }
   if (!list.length) {
-    const msg = gymOk && !pool.length
-      ? `Nenhum exercício cadastrado em <b>${esc(draft.gymName)}</b>.<br>Adicione na aba Exercícios.`
-      : 'Nenhum exercício encontrado.';
+    const msg = 'Nenhum exercício encontrado.';
     host.innerHTML = `<div class="empty">${icon('search')}<p>${msg}</p></div>`;
     return;
   }
@@ -773,6 +827,10 @@ function renderTop() {
   if (state.tab === 'exercicios') sub.textContent = `${state.exercises.length} exercícios`;
   if (state.tab === 'historico') sub.textContent = `${state.workouts.length} treinos registrados`;
 
+  const chip = $('#user-chip');
+  chip.hidden = !state.username;
+  if (state.username) chip.textContent = state.username.charAt(0);
+
   const action = $('#top-action');
   action.hidden = true;
   if (state.tab === 'exercicios') {
@@ -959,6 +1017,11 @@ document.addEventListener('click', (e) => {
       break;
     }
 
+    case 'picker-show-all':
+      sheetState.showAll = true;
+      renderPickerList($('#picker-q')?.value || '');
+      break;
+
     case 'sel-gym':
       selectGym(arg);
       renderTreino();
@@ -1113,6 +1176,26 @@ document.addEventListener('click', (e) => {
       syncQueue();
       break;
 
+    case 'user-menu':
+      openSheet(sheetShell(`Olá, ${state.username}!`, `
+        <p style="font-size:14px;color:var(--muted);line-height:1.5;margin:0 2px 4px">
+          Sua conta: <b style="color:var(--text)">${esc(state.username)}</b>.<br>
+          Seus treinos, academias e exercícios são privados.
+        </p>
+        <button class="btn-danger" data-action="logout-yes">Sair da conta</button>
+        <button class="btn-ghost" data-action="close-sheet">Cancelar</button>`));
+      break;
+
+    case 'logout-yes':
+      (async () => {
+        try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) { /* ignora */ }
+        setToken('');
+        state.draft = null;
+        saveDraft();
+        location.reload();
+      })();
+      break;
+
     case 'hist-open':
       openWorkoutDetailSheet(arg);
       break;
@@ -1169,6 +1252,13 @@ document.addEventListener('input', (e) => {
 
 $('#backdrop').addEventListener('click', closeSheet);
 
+// tela de login / criar conta
+$('#auth-tab-login').addEventListener('click', () => setAuthMode('login'));
+$('#auth-tab-register').addEventListener('click', () => setAuthMode('register'));
+$('#auth-go').addEventListener('click', doAuth);
+[$('#auth-user'), $('#auth-pass')].forEach((el) =>
+  el.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAuth(); }));
+
 // atualiza timer do treino a cada segundo
 setInterval(() => {
   const el = $('#draft-timer');
@@ -1191,22 +1281,89 @@ document.addEventListener('visibilitychange', () => {
 // internet voltou: envia a fila automaticamente
 window.addEventListener('online', () => syncQueue());
 
+// ---------- Tela de login / criar conta ----------
+const authState = { mode: 'login' };
+
+function showAuth() {
+  $('#auth').hidden = false;
+  setAuthMode('login');
+}
+
+function hideAuth() {
+  $('#auth').hidden = true;
+}
+
+function setAuthMode(mode) {
+  authState.mode = mode;
+  $('#auth-tab-login').classList.toggle('sel', mode === 'login');
+  $('#auth-tab-register').classList.toggle('sel', mode === 'register');
+  $('#auth-go').textContent = mode === 'login' ? 'Entrar' : 'Criar conta';
+  $('#auth-pass').setAttribute('autocomplete', mode === 'login' ? 'current-password' : 'new-password');
+  $('#auth-msg').textContent = '';
+}
+
+async function doAuth() {
+  const username = $('#auth-user').value.trim();
+  const password = $('#auth-pass').value;
+  const msg = $('#auth-msg');
+  if (!username || !password) {
+    msg.textContent = 'Preencha usuário e senha.';
+    return;
+  }
+  $('#auth-go').disabled = true;
+  msg.textContent = '';
+  try {
+    const url = authState.mode === 'login' ? '/api/auth/login' : '/api/auth/register';
+    const out = await api(url, { method: 'POST', body: JSON.stringify({ username, password }) });
+    setToken(out.token);
+    hideAuth();
+    state.username = out.username;
+    await bootData();
+    renderAll();
+  } catch (e) {
+    msg.textContent = e.message;
+  } finally {
+    $('#auth-go').disabled = false;
+  }
+}
+
 // ---------- Boot ----------
-(async function boot() {
-  loadDraft();
+async function bootData() {
   try {
     const health = await api('/api/health').catch(() => ({ db: 'mongo' }));
     state.demo = health.db === 'memoria';
     $('#demo-pill').hidden = !state.demo;
     await Promise.all([loadGyms(), loadExercises(), loadWorkouts()]);
   } catch (e) {
+    if (String(e.message).includes('login')) throw e;
     // offline: mantém o que carregou e completa com a cópia salva no aparelho
     fillFromDataCache();
     showToast('Você está offline — mostrando os dados salvos no aparelho.');
   }
   repairDraft();
-  renderAll();
   syncQueue();
+}
+
+(async function boot() {
+  loadDraft();
+  if (!getToken()) {
+    showAuth();
+    const loader = $('#loader');
+    loader.classList.add('out');
+    setTimeout(() => loader.remove(), 400);
+    return;
+  }
+  try {
+    const me = await api('/api/auth/me');
+    state.username = me.username;
+    await bootData();
+    renderAll();
+  } catch (e) {
+    // sessão inválida: volta para o login
+    setToken('');
+    showAuth();
+  }
+  renderAll();
   if ('serviceWorker' in navigator) {
     navigator.serviceWorker.register('/sw.js').catch(() => { /* sem SW: app funciona online */ });
   }

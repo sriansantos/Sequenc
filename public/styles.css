@@ -601,6 +601,67 @@ main {
 .toast.show { transform: translate(-50%, 0); opacity: 1; }
 .toast.accent { border-color: rgba(255, 161, 74, 0.45); color: var(--accent); }
 
+/* ============ Login / Criar conta ============ */
+#auth {
+  position: fixed; inset: 0; z-index: 90;
+  display: grid; place-items: center;
+  padding: 24px;
+  background:
+    radial-gradient(900px 600px at 50% -10%, #1B1B22 0%, rgba(27, 27, 34, 0) 60%),
+    var(--bg);
+}
+.auth-card { width: 100%; max-width: 340px; text-align: center; }
+.auth-icon {
+  width: 68px; height: 68px; margin: 0 auto 14px;
+  border-radius: 22px;
+  display: grid; place-items: center;
+  background: var(--accent-soft);
+  border: 1px solid rgba(255, 161, 74, 0.25);
+  color: var(--accent);
+}
+.auth-icon svg { width: 34px; height: 34px; }
+.auth-card h1 { font-size: 30px; font-weight: 800; letter-spacing: -0.03em; }
+.auth-sub { font-size: 13.5px; color: var(--muted); margin: 4px 0 20px; font-weight: 500; }
+.auth-tabs {
+  display: flex; gap: 4px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 4px;
+  margin-bottom: 16px;
+}
+.auth-tabs button {
+  flex: 1; height: 38px;
+  border-radius: 9px;
+  font-size: 14px; font-weight: 600;
+  color: var(--muted);
+}
+.auth-tabs button.sel { background: var(--card-2); color: var(--text); }
+.auth-card .field-input { margin-bottom: 10px; text-align: left; }
+.auth-card .btn-primary { margin-top: 6px; }
+.auth-msg { font-size: 13px; color: var(--danger); margin-top: 12px; min-height: 18px; font-weight: 600; }
+
+.user-chip {
+  width: 38px; height: 38px; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--accent-soft);
+  border: 1px solid rgba(255, 161, 74, 0.3);
+  color: var(--accent);
+  font-size: 15px; font-weight: 800;
+  text-transform: uppercase;
+  transition: transform 0.12s ease;
+}
+.user-chip:active { transform: scale(0.92); }
+
+.spark { width: 100%; height: 84px; margin-top: 8px; }
+.seed-row {
+  display: flex; align-items: center; gap: 9px;
+  font-size: 13.5px; color: var(--muted); font-weight: 600;
+  margin: 4px 2px 0;
+  text-align: left;
+}
+.seed-row input { width: 18px; height: 18px; accent-color: var(--accent); }
+
 /* Telas largas: mantém largura de app */
 @media (min-width: 640px) {
   main { padding-left: 0; padding-right: 0; }

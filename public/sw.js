@@ -3,7 +3,7 @@
    - Arquivos do app (HTML/CSS/JS/ícones): guardados na instalação e atualizados em segundo plano
    - Respostas da API (histórico, exercícios): rede primeiro, com cópia em cache para usar offline
    - Envio de treinos (POST): tratado pela fila offline dentro do app (app.js) */
-const VERSION = 'sequenc-v2';
+const VERSION = 'sequenc-v3';
 const SHELL = [
   '/',
   '/index.html',

@@ -30,6 +30,7 @@
       </div>
       <div class="topbar-actions">
         <span class="demo-pill" id="demo-pill" hidden>demo</span>
+        <button class="user-chip" id="user-chip" data-action="user-menu" hidden aria-label="Menu do usuário"></button>
         <button class="icon-btn" id="top-action" data-action="top-action" hidden aria-label="Adicionar"></button>
       </div>
     </div>
@@ -70,6 +71,25 @@
   </div>
   <div class="toast" id="toast" hidden></div>
 
+  <div id="auth" hidden>
+    <div class="auth-card">
+      <div class="auth-icon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M4.5 10v4"/><path d="M8 7v10"/><path d="M16 7v10"/><path d="M19.5 10v4"/><path d="M8 12h8"/>
+        </svg>
+      </div>
+      <h1>Sequenc</h1>
+      <p class="auth-sub">Controle seus treinos e cargas</p>
+      <div class="auth-tabs">
+        <button id="auth-tab-login" class="sel">Entrar</button>
+        <button id="auth-tab-register">Criar conta</button>
+      </div>
+      <input class="field-input" id="auth-user" placeholder="Usuário" maxlength="30" autocomplete="username" autocapitalize="none">
+      <input class="field-input" id="auth-pass" type="password" placeholder="Senha" maxlength="60" autocomplete="current-password">
+      <button class="btn-primary" id="auth-go">Entrar</button>
+      <p class="auth-msg" id="auth-msg"></p>
+    </div>
+  </div>
   <script src="/app.js"></script>
 </body>
 </html>
