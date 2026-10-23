@@ -84,6 +84,12 @@ const Gym = mongoose.model('Gym', gymSchema);
 const Exercise = mongoose.model('Exercise', exerciseSchema);
 const Workout = mongoose.model('Workout', workoutSchema);
 
+// IDs vindos do cliente podem estar em formato inválido (rascunhos antigos):
+// consultas por _id inválido lançariam CastError; devolve "não encontrado" no lugar.
+function idQuery(id) {
+  return mongoose.isValidObjectId(id) ? { _id: id } : null;
+}
+
 function groupIndex(g) {
   const i = GROUPS.indexOf(g);
   return i === -1 ? GROUPS.length : i;
@@ -127,21 +133,27 @@ const mongoStore = {
     return Gym.create({ name, userId });
   },
   async updateGym(id, userId, { name }) {
-    return Gym.findOneAndUpdate({ _id: id, userId }, { name }, { new: true, runValidators: true }).lean();
+    const q = idQuery(id);
+    if (!q) return null;
+    return Gym.findOneAndUpdate({ ...q, userId }, { name }, { new: true, runValidators: true }).lean();
   },
   // Exclui a academia movendo os exercícios dela para a academia restante mais antiga do usuário.
   // Retorna null se for a última academia (não pode excluir).
   async deleteGym(id, userId) {
-    const rest = await Gym.find({ _id: { $ne: id }, userId }).sort({ createdAt: 1 }).lean();
+    const q = idQuery(id);
+    if (!q) return null;
+    const rest = await Gym.find({ _id: { $ne: q._id }, userId }).sort({ createdAt: 1 }).lean();
     if (!rest.length) return null;
     const target = rest[0];
-    await Exercise.updateMany({ gymId: id, userId }, { $set: { gymId: target._id.toString() } });
-    await Gym.findOneAndDelete({ _id: id, userId });
+    await Exercise.updateMany({ gymId: id, userId }, { $set: { gymId: String(target._id) } });
+    await Gym.findOneAndDelete({ ...q, userId });
     return { movedTo: target };
   },
   async getGym(id, userId) {
     if (!id) return null;
-    return Gym.findOne({ _id: id, userId }).lean();
+    const q = idQuery(id);
+    if (!q) return null;
+    return Gym.findOne({ ...q, userId }).lean();
   },
   async firstGym(userId) {
     return Gym.findOne({ userId }).sort({ createdAt: 1 }).lean();
@@ -158,14 +170,18 @@ const mongoStore = {
     return Exercise.create({ name, group, gymId, userId });
   },
   async updateExercise(id, userId, patch) {
+    const q = idQuery(id);
+    if (!q) return null;
     return Exercise.findOneAndUpdate(
-      { _id: id, userId },
+      { ...q, userId },
       { name: patch.name, group: patch.group, gymId: patch.gymId },
       { new: true, runValidators: true }
     ).lean();
   },
   async deleteExercise(id, userId) {
-    const out = await Exercise.findOneAndDelete({ _id: id, userId });
+    const q = idQuery(id);
+    if (!q) return false;
+    const out = await Exercise.findOneAndDelete({ ...q, userId });
     return !!out;
   },
 
@@ -176,7 +192,9 @@ const mongoStore = {
     return Workout.create(data);
   },
   async deleteWorkout(id, userId) {
-    const out = await Workout.findOneAndDelete({ _id: id, userId });
+    const q = idQuery(id);
+    if (!q) return false;
+    const out = await Workout.findOneAndDelete({ ...q, userId });
     return !!out;
   },
   async init() {

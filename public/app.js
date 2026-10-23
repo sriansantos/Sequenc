@@ -1320,8 +1320,13 @@ async function doAuth() {
     state.username = out.username;
     await bootData();
     renderAll();
+    showToast(authState.mode === 'login'
+      ? `Bem-vindo de volta, ${out.username}! 💪`
+      : `Conta criada! Bem-vindo, ${out.username}! 💪`, true);
   } catch (e) {
-    msg.textContent = e.message;
+    // erro de rede: mensagem amigável em vez de falha silenciosa
+    if (isNetworkError(e)) msg.textContent = 'Sem conexão com o servidor. Verifique se o app está rodando.';
+    else msg.textContent = e.message || 'Não foi possível completar. Tente novamente.';
   } finally {
     $('#auth-go').disabled = false;
   }

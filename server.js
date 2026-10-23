@@ -23,6 +23,27 @@ const wrap = (fn) => (req, res) => fn(req, res).catch((err) => {
   res.status(500).json({ error: 'Erro interno do servidor.' });
 });
 
+// Normaliza documentos do MongoDB (_id) para o formato "id" que o frontend espera
+function normalizeIds(data) {
+  if (Array.isArray(data)) return data.map(normalizeIds);
+  if (data && typeof data === 'object' && !(data instanceof Date)) {
+    const out = {};
+    for (const [k, v] of Object.entries(data)) {
+      if (k === '_id') out.id = String(v);
+      else if (k === '_doc' || k === '$__') continue;
+      else out[k] = normalizeIds(v);
+    }
+    return out;
+  }
+  return data;
+}
+
+app.use('/api', (req, res, next) => {
+  const origJson = res.json.bind(res);
+  res.json = (data) => origJson(normalizeIds(data));
+  next();
+});
+
 // ---------- Autenticação ----------
 function hashPassword(password, salt) {
   return crypto.scryptSync(String(password), salt, 64).toString('hex');
@@ -53,11 +74,12 @@ app.post('/api/auth/register', wrap(async (req, res) => {
 
   const salt = crypto.randomBytes(16).toString('hex');
   const user = await store.createUser({ username, salt, passHash: hashPassword(password, salt) });
-  const gym = await store.createGym({ name: 'Academia', userId: user.id });
-  await store.seedExercises(SEED_EXERCISES, gym.id, user.id);
+  const userId = String(user.id ?? user._id);
+  const gym = await store.createGym({ name: 'Academia', userId });
+  await store.seedExercises(SEED_EXERCISES, gym.id ?? String(gym._id), userId);
   const token = crypto.randomBytes(24).toString('hex');
-  await store.createSession({ token, userId: user.id });
-  res.status(201).json({ token, username });
+  await store.createSession({ token, userId });
+  res.status(201).json({ token, username: user.username });
 }));
 
 app.post('/api/auth/login', wrap(async (req, res) => {
@@ -69,8 +91,9 @@ app.post('/api/auth/login', wrap(async (req, res) => {
   const ok = hash.length === user.passHash.length &&
     crypto.timingSafeEqual(Buffer.from(hash), Buffer.from(user.passHash));
   if (!ok) return bad(res, 'Usuário ou senha incorretos.', 401);
+  const userId = String(user.id ?? user._id);
   const token = crypto.randomBytes(24).toString('hex');
-  await store.createSession({ token, userId: user.id });
+  await store.createSession({ token, userId });
   res.json({ token, username: user.username });
 }));
 
@@ -108,7 +131,7 @@ app.put('/api/gyms/:id', wrap(async (req, res) => {
   const name = String(req.body?.name ?? '').trim().slice(0, 40);
   if (!name) return bad(res, 'Informe o nome da academia.');
   const dup = await store.findGymByName(name, req.userId);
-  if (dup && dup.id !== req.params.id && dup._id !== req.params.id) {
+  if (dup && String(dup.id ?? dup._id) !== String(req.params.id)) {
     return bad(res, 'Já existe uma academia com esse nome.', 409);
   }
   const updated = await store.updateGym(req.params.id, req.userId, { name });
@@ -136,7 +159,8 @@ function sanitizeExercise(body) {
 // Resolve a academia do exercício (ou a primeira do usuário, como padrão)
 async function resolveGymId(gymId, userId) {
   const gyms = await store.listGyms(userId);
-  return gyms.find((g) => g.id === gymId || g._id === gymId) ? gymId : (gyms[0]?.id ?? gyms[0]?._id ?? '');
+  const found = gyms.find((g) => String(g.id ?? g._id) === String(gymId));
+  return found ? String(found.id ?? found._id) : (gyms[0] ? String(gyms[0].id ?? gyms[0]._id) : '');
 }
 
 app.get('/api/exercises', wrap(async (req, res) => {
@@ -157,8 +181,8 @@ app.put('/api/exercises/:id', wrap(async (req, res) => {
   if (!name) return bad(res, 'Informe o nome do exercício.');
   const gymId = await resolveGymId(sanitizeExercise(req.body).gymId, req.userId);
   const dup = await store.findExerciseByName(name, gymId, req.userId);
-  const dupId = dup ? (dup.id ?? dup._id?.toString()) : null;
-  if (dup && dupId !== req.params.id) {
+  const dupId = dup ? String(dup.id ?? dup._id) : null;
+  if (dup && dupId !== String(req.params.id)) {
     return bad(res, 'Já existe um exercício com esse nome nesta academia.', 409);
   }
   const updated = await store.updateExercise(req.params.id, req.userId, { name, group, gymId });
