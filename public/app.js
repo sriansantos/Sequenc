@@ -305,6 +305,31 @@ function repairDraft() {
   }
 }
 
+// Treinos-modelo: mantém só o último feito de cada tipo
+// (tipo = título do treino, ou a combinação de grupos quando não tem título)
+function workoutTypeKey(w) {
+  const t = (w.title || '').trim().toLowerCase();
+  if (t) return 't:' + t;
+  return 'g:' + [...new Set((w.items || []).map((i) => i.group))].sort().join('+');
+}
+
+function workoutTypeLabel(w) {
+  const t = (w.title || '').trim();
+  if (t) return t;
+  const groups = [...new Set((w.items || []).map((i) => i.group))];
+  groups.sort((a, b) => GROUPS.indexOf(a) - GROUPS.indexOf(b));
+  return groups.join(' + ');
+}
+
+function latestWorkoutTypes() {
+  const map = new Map();
+  for (const w of state.workouts) { // já vem ordenado do mais recente
+    const k = workoutTypeKey(w);
+    if (!map.has(k)) map.set(k, w);
+  }
+  return [...map.values()];
+}
+
 function startWorkout(fromWorkout = null) {
   // Academia: a do treino repetido, ou a selecionada; fallback para a primeira
   let gymId = fromWorkout ? fromWorkout.gymId : state.gymId;
@@ -648,8 +673,6 @@ function renderTreino() {
     const goal = state.goal;
     const batida = done >= goal;
     const restam = Math.max(0, goal - done);
-    const lastForGym = state.workouts.find((w) => (w.gymId ? w.gymId === state.gymId : !state.gymId));
-    const hasLast = !!lastForGym;
     const gymChips = state.gyms.map((g) =>
       `<button class="group-chip ${g.id === state.gymId ? 'sel' : ''}" data-action="sel-gym" data-arg="${esc(g.id)}">${esc(g.name)}</button>`
     ).join('');
@@ -661,6 +684,20 @@ function renderTreino() {
       const extra = i >= goal;
       dots.push(`<span class="goal-dot ${cheio ? 'cheio' : ''} ${extra ? 'extra' : ''}">${cheio ? icon('check') : ''}</span>`);
     }
+    const templates = latestWorkoutTypes();
+    const templatesHtml = templates.length ? `
+      <div class="sec-title">${icon('play')} Seus treinos</div>
+      ${templates.map((w) => {
+        const exCount = (w.items || []).length;
+        return `
+        <button class="card tpl-card" data-action="repeat-workout" data-arg="${esc(w.id)}">
+          <div class="tpl-info">
+            <span class="tpl-name">${esc(workoutTypeLabel(w))}</span>
+            <span class="tpl-sub">${esc(w.gymName || '')}${w.gymName ? ' · ' : ''}${relTime(w.date)} · ${exCount} exercício${exCount > 1 ? 's' : ''}</span>
+          </div>
+          <span class="tpl-play">${icon('play')}</span>
+        </button>`;
+      }).join('')}` : '';
     host.innerHTML = `
       <section class="card start-card">
         <div class="start-icon">${icon('dumbbell')}</div>
@@ -670,9 +707,9 @@ function renderTreino() {
         <div class="gym-chips">${gymChips}
           <button class="group-chip chip-manage" data-action="manage-gyms" aria-label="Gerenciar academias">${icon('edit')}</button>
         </div>
-        <button class="btn-primary" data-action="start-workout">${icon('play')} Iniciar treino</button>
-        ${hasLast ? '<button class="btn-ghost" data-action="repeat-last">Repetir último treino</button>' : ''}
+        <button class="btn-primary" data-action="start-workout">${icon('play')} Iniciar treino do zero</button>
       </section>
+      ${templatesHtml}
       <section class="card goal-card">
         <div class="goal-head">
           <div class="goal-info">
@@ -997,6 +1034,12 @@ document.addEventListener('click', (e) => {
     case 'start-workout':
       startWorkout();
       break;
+
+    case 'repeat-workout': {
+      const w = state.workouts.find((x) => x.id === arg);
+      if (w) startWorkout(w);
+      break;
+    }
 
     case 'repeat-last':
       if (state.workouts.length) startWorkout(state.workouts[0]);
