@@ -9,6 +9,7 @@ Tema preto com laranja claro, feito para o **iPhone** (instala na Tela de Iníci
 - **Academias**: cadastre os lugares onde treina (2 ou 3 academias, por exemplo). Escolhe onde vai treinar antes de iniciar, e exercícios, histórico e estatísticas ficam separados por academia.
 - **Treino**: inicie um treino, adicione exercícios, registre peso × repetições por série e finalize. O treino em andamento fica salvo no celular mesmo se você fechar a página.
 - **Evolução**: no detalhe de cada exercício (aba Exercícios), um gráfico mostra a subida da melhor carga treino a treino.
+- **Treinos-modelo**: a tela inicial mostra o último treino feito de cada tipo (ex.: "Costas + Braços", "Pernas") — toque num deles para começar já com os exercícios e cargas da última vez. Todo treino finalizado também fica no Histórico completo.
 - **Meta semanal**: defina quantos dias por semana você quer treinar (1 a 7, no cartão da tela inicial). A cada treino finalizado, um círculo laranja é preenchido; ao bater a meta, o app comemora. Treinos em qualquer academia contam.
 - **Última carga**: ao escolher um exercício, o app mostra a carga da última vez ("última: 40 kg × 10").
 - **Repetir último treino**: recria o treino anterior com as mesmas séries para ajustar e evoluir.
