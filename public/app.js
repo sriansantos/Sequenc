@@ -126,7 +126,15 @@ async function api(url, opts = {}) {
   if (!init.signal && typeof AbortSignal !== 'undefined' && AbortSignal.timeout) {
     init.signal = AbortSignal.timeout(6000);
   }
-  const res = await fetch(url, init);
+  let res;
+  try {
+    res = await fetch(url, init);
+  } catch (e) {
+    // falha de rede / sem sinal / timeout — mensagem única e reconhecível
+    const err = new Error('Sem conexão com a internet.');
+    err.name = 'NetworkError';
+    throw err;
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(data.error || 'Erro inesperado.');
   return data;
@@ -911,7 +919,35 @@ function renderAll() {
 // ---------- Ações ----------
 // Falha de rede (sem sinal, timeout, servidor fora): salvar na fila do celular
 function isNetworkError(e) {
-  return e instanceof TypeError || e.name === 'TimeoutError' || e.name === 'AbortError';
+  return (
+    e instanceof TypeError ||
+    e.name === 'NetworkError' ||
+    e.name === 'TimeoutError' ||
+    e.name === 'AbortError'
+  );
+}
+
+// ---------- Estado de conexão ----------
+function updateConnPill() {
+  const pill = $('#conn-pill');
+  if (pill) pill.hidden = navigator.onLine;
+}
+
+// Executa uma ação de rede travando o botão até terminar (sem cliques repetidos)
+async function guardAsync(btn, fn) {
+  if (!btn) return fn();
+  if (btn.dataset.busy === '1') return; // já enviando — ignora o toque extra
+  btn.dataset.busy = '1';
+  btn.classList.add('is-busy');
+  try {
+    await fn();
+  } finally {
+    // o botão pode ter saído da tela (ex.: sheet fechou) — só libera se ainda existe
+    if (btn.isConnected) {
+      delete btn.dataset.busy;
+      btn.classList.remove('is-busy');
+    }
+  }
 }
 
 async function finishWorkout() {
@@ -1085,7 +1121,7 @@ document.addEventListener('click', (e) => {
       break;
 
     case 'save-gym':
-      saveGym();
+      guardAsync(btn, () => saveGym());
       break;
 
     case 'gym-edit':
@@ -1109,7 +1145,7 @@ document.addEventListener('click', (e) => {
       break;
 
     case 'gym-del-yes':
-      (async () => {
+      guardAsync(btn, async () => {
         try {
           const out = await api(`/api/gyms/${state.pendingId}`, { method: 'DELETE' });
           await loadGyms();
@@ -1119,7 +1155,7 @@ document.addEventListener('click', (e) => {
           if (out?.movedTo?.name) showToast(`Exercícios movidos para ${out.movedTo.name}.`);
           else showToast('Academia excluída.');
         } catch (err) { showToast(err.message); }
-      })();
+      });
       break;
 
     case 'filter-gym':
@@ -1133,7 +1169,7 @@ document.addEventListener('click', (e) => {
       break;
 
     case 'save-ex':
-      saveExercise();
+      guardAsync(btn, () => saveExercise());
       break;
 
     case 'ex-open':
@@ -1155,7 +1191,7 @@ document.addEventListener('click', (e) => {
       break;
 
     case 'ex-del-yes':
-      (async () => {
+      guardAsync(btn, async () => {
         try {
           await api(`/api/exercises/${state.pendingId}`, { method: 'DELETE' });
           state.exercises = state.exercises.filter((x) => x.id !== state.pendingId);
@@ -1163,7 +1199,7 @@ document.addEventListener('click', (e) => {
           renderAll();
           showToast('Exercício excluído.');
         } catch (err) { showToast(err.message); }
-      })();
+      });
       break;
 
     case 'add-set': {
@@ -1205,7 +1241,7 @@ document.addEventListener('click', (e) => {
     }
 
     case 'finish':
-      finishWorkout();
+      guardAsync(btn, () => finishWorkout());
       break;
 
     case 'discard-ask':
@@ -1226,7 +1262,7 @@ document.addEventListener('click', (e) => {
       break;
 
     case 'sync-queue':
-      syncQueue();
+      guardAsync(btn, () => syncQueue());
       break;
 
     case 'goal-edit': {
@@ -1262,13 +1298,13 @@ document.addEventListener('click', (e) => {
       break;
 
     case 'logout-yes':
-      (async () => {
+      guardAsync(btn, async () => {
         try { await api('/api/auth/logout', { method: 'POST' }); } catch (e) { /* ignora */ }
         setToken('');
         state.draft = null;
         saveDraft();
         location.reload();
-      })();
+      });
       break;
 
     case 'hist-open':
@@ -1286,7 +1322,7 @@ document.addEventListener('click', (e) => {
       break;
 
     case 'hist-del-yes':
-      (async () => {
+      guardAsync(btn, async () => {
         try {
           await api(`/api/workouts/${state.pendingId}`, { method: 'DELETE' });
           await loadWorkouts();
@@ -1295,7 +1331,7 @@ document.addEventListener('click', (e) => {
           renderTop();
           showToast('Treino excluído.');
         } catch (err) { showToast(err.message); }
-      })();
+      });
       break;
 
     case 'close-sheet':
@@ -1353,8 +1389,14 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// internet voltou: envia a fila automaticamente
-window.addEventListener('online', () => syncQueue());
+// internet voltou: envia a fila automaticamente + esconde o aviso
+window.addEventListener('online', () => {
+  updateConnPill();
+  syncQueue();
+});
+
+// caiu a conexão: mostra o aviso persistente
+window.addEventListener('offline', () => updateConnPill());
 
 // ---------- Tela de login / criar conta ----------
 const authState = { mode: 'login' };
@@ -1429,6 +1471,7 @@ async function bootData() {
 
 (async function boot() {
   loadDraft();
+  updateConnPill();
   if (!getToken()) {
     showAuth();
     const loader = $('#loader');

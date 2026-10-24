@@ -326,6 +326,32 @@ main {
   color: var(--accent);
 }
 
+/* ============ Estado de conexão ============ */
+.conn-pill {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px);
+  z-index: 45;
+  display: flex; align-items: center; gap: 8px;
+  background: #222228;
+  border: 1px solid rgba(255, 90, 95, 0.45);
+  color: #FF8A8E;
+  font-size: 12.5px; font-weight: 600;
+  padding: 9px 16px;
+  border-radius: 999px;
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55);
+  max-width: calc(100vw - 40px);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.conn-pill .q-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: #FF5A5F;
+  flex-shrink: 0;
+  animation: pulse 1.2s ease-in-out infinite;
+}
+
+/* botão travado durante envio (evita toques repetidos) */
+.is-busy { opacity: 0.55; pointer-events: none; }
+
 /* ============ Fila offline ============ */
 .queue-banner {
   width: 100%;
