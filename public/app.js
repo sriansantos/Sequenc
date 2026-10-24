@@ -969,6 +969,22 @@ async function finishWorkout() {
     return;
   }
 
+  // Trava: mesmo grupo muscular (ou mesmo título) não pode ser salvo duas vezes no mesmo dia
+  const typeKey = workoutTypeKey({ title: d.title, items });
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const dupSaved = state.workouts.find(
+    (w) => workoutTypeKey(w) === typeKey && new Date(w.date) >= startOfToday
+  );
+  const dupQueued = loadQueue().find(
+    (q) => workoutTypeKey(q) === typeKey && new Date(q.date) >= startOfToday
+  );
+  if (dupSaved || dupQueued) {
+    const dup = dupSaved || dupQueued;
+    showToast(`${workoutTypeLabel(dup)} já registrado hoje 💪`, true);
+    return; // mantém o treino aberto — nada é salvo em duplicata
+  }
+
   const payload = { title: d.title, date: d.startedAt, gymId: d.gymId, gymName: d.gymName, items };
 
   // Sem internet: guarda na fila do celular — sobe sozinho quando o sinal voltar
