@@ -396,10 +396,10 @@ function sheetShell(title, body, opts = {}) {
     <div class="sheet-body">${body}</div>`;
 }
 
-function confirmSheet({ title, msg, action, label }) {
+function confirmSheet({ title, msg, action, label, okClass = 'btn-danger', arg }) {
   const body = `
     <p style="font-size:14px;color:var(--muted);line-height:1.5;margin-top:-2px">${esc(msg)}</p>
-    <button class="btn-danger" data-action="${action}">${esc(label)}</button>
+    <button class="${okClass}" data-action="${action}"${arg ? ` data-arg="${esc(arg)}"` : ''}>${esc(label)}</button>
     <button class="btn-ghost" data-action="close-sheet">Cancelar</button>`;
   openSheet(sheetShell(title, body));
 }
@@ -950,7 +950,7 @@ async function guardAsync(btn, fn) {
   }
 }
 
-async function finishWorkout() {
+async function finishWorkout(force = false) {
   const d = state.draft;
   if (!d) return;
   const items = d.items
@@ -979,10 +979,16 @@ async function finishWorkout() {
   const dupQueued = loadQueue().find(
     (q) => workoutTypeKey(q) === typeKey && new Date(q.date) >= startOfToday
   );
-  if (dupSaved || dupQueued) {
+  if (!force && (dupSaved || dupQueued)) {
     const dup = dupSaved || dupQueued;
-    showToast(`${workoutTypeLabel(dup)} já registrado hoje 💪`, true);
-    return; // mantém o treino aberto — nada é salvo em duplicata
+    confirmSheet({
+      title: 'Treino repetido hoje',
+      msg: `Você já registrou ${workoutTypeLabel(dup)} hoje. Quer salvar este treino mesmo assim?`,
+      action: 'finish-force',
+      label: 'Salvar mesmo assim',
+      okClass: 'btn-primary',
+    });
+    return; // aguarda a confirmação — nada é salvo ainda
   }
 
   const payload = { title: d.title, date: d.startedAt, gymId: d.gymId, gymName: d.gymName, items };
@@ -1258,6 +1264,10 @@ document.addEventListener('click', (e) => {
 
     case 'finish':
       guardAsync(btn, () => finishWorkout());
+      break;
+
+    case 'finish-force':
+      guardAsync(btn, () => finishWorkout(true));
       break;
 
     case 'discard-ask':
