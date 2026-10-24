@@ -39,6 +39,16 @@ body {
   -webkit-tap-highlight-color: transparent;
   -webkit-font-smoothing: antialiased;
   overscroll-behavior-y: none;
+  /* impede "marcar/copiar" texto ao tocar e segurar (iPhone) */
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+
+/* campos de digitação continuam selecionáveis */
+input, textarea {
+  -webkit-user-select: text;
+  user-select: text;
 }
 
 button {
@@ -228,6 +238,10 @@ main {
 .ex-x { width: 30px; height: 30px; border-radius: 50%; color: var(--faint); display: grid; place-items: center; flex-shrink: 0; }
 .ex-x svg { width: 15px; height: 15px; }
 .ex-x:active { color: var(--danger); }
+.ex-ctrl { display: flex; align-items: center; flex-shrink: 0; }
+.mv-btn { width: 27px; height: 32px; color: var(--faint); display: grid; place-items: center; }
+.mv-btn svg { width: 16px; height: 16px; }
+.mv-btn:active { color: var(--accent); }
 
 .sets { display: grid; gap: 8px; margin-top: 14px; }
 .set-row { display: grid; grid-template-columns: 20px minmax(0,1fr) 38px minmax(0,1fr) 34px 26px; align-items: center; gap: 8px; }

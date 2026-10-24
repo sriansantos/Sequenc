@@ -30,6 +30,8 @@ const ICONS = {
   x: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>',
   check: '<path d="M4 12l5 5L20 7"/>',
   chev: '<path d="M9 6l6 6-6 6"/>',
+  chevUp: '<path d="M18 15l-6-6-6 6"/>',
+  chevDown: '<path d="M6 9l6 6 6-6"/>',
   edit: '<path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/>',
   trash: '<path d="M4 7h16"/><path d="M10 4h4"/><path d="M6.5 7l.8 13h9.4l.8-13"/>',
   search: '<circle cx="11" cy="11" r="7"/><path d="M20.5 20.5 16 16"/>',
@@ -730,6 +732,7 @@ function renderTreino() {
 
   const itemsHtml = d.items.map((it, i) => {
     const perf = bestSetLabel(it.exerciseId);
+    const last = d.items.length - 1;
     return `
       <section class="card ex-card">
         <div class="ex-head">
@@ -740,7 +743,11 @@ function renderTreino() {
               ${perf ? `<span class="last-hint">última: ${esc(perf)}</span>` : ''}
             </div>
           </div>
-          <button class="ex-x" data-action="del-item" data-arg="${i}" aria-label="Remover exercício">${icon('x')}</button>
+          <div class="ex-ctrl">
+            <button class="mv-btn" data-action="move-item" data-i="${i}" data-dir="up" ${i === 0 ? 'style="opacity:.22;pointer-events:none"' : ''} aria-label="Mover para cima">${icon('chevUp')}</button>
+            <button class="mv-btn" data-action="move-item" data-i="${i}" data-dir="down" ${i === last ? 'style="opacity:.22;pointer-events:none"' : ''} aria-label="Mover para baixo">${icon('chevDown')}</button>
+            <button class="ex-x" data-action="del-item" data-arg="${i}" aria-label="Remover exercício">${icon('x')}</button>
+          </div>
         </div>
         <div class="sets">
           ${it.sets.map((s, si) => `
@@ -1250,6 +1257,18 @@ document.addEventListener('click', (e) => {
         saveDraft();
         renderTreino();
       }
+      break;
+    }
+
+    case 'move-item': {
+      if (!draft) break;
+      const i = Number(btn.dataset.i);
+      const j = btn.dataset.dir === 'up' ? i - 1 : i + 1;
+      if (j < 0 || j >= draft.items.length) break;
+      const [moved] = draft.items.splice(i, 1);
+      draft.items.splice(j, 0, moved);
+      saveDraft();
+      renderTreino();
       break;
     }
 
