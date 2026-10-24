@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema(
     username: { type: String, required: true, unique: true, trim: true, lowercase: true },
     passHash: { type: String, required: true },
     salt: { type: String, required: true },
+    weeklyGoal: { type: Number, default: 3, min: 1, max: 7 },
     createdAt: { type: Date, default: Date.now },
   },
   { versionKey: false }
@@ -108,7 +109,14 @@ const mongoStore = {
   },
   async findUserById(id) {
     if (!id) return null;
-    return User.findById(id).lean();
+    const q = idQuery(id);
+    if (!q) return null;
+    return User.findOne(q).lean();
+  },
+  async updateUser(id, patch) {
+    const q = idQuery(id);
+    if (!q) return null;
+    return User.findOneAndUpdate(q, { weeklyGoal: patch.weeklyGoal }, { new: true, runValidators: true }).lean();
   },
   async createSession({ token, userId }) {
     return Session.create({ token, userId });
@@ -208,7 +216,7 @@ const memId = () => crypto.randomUUID();
 
 const memStore = {
   async createUser({ username, passHash, salt }) {
-    const user = { id: memId(), username: String(username).toLowerCase(), passHash, salt, createdAt: new Date() };
+    const user = { id: memId(), username: String(username).toLowerCase(), passHash, salt, weeklyGoal: 3, createdAt: new Date() };
     mem.users.push(user);
     return user;
   },
@@ -217,6 +225,12 @@ const memStore = {
   },
   async findUserById(id) {
     return mem.users.find((u) => u.id === id) || null;
+  },
+  async updateUser(id, patch) {
+    const user = mem.users.find((u) => u.id === id);
+    if (!user) return null;
+    user.weeklyGoal = patch.weeklyGoal;
+    return user;
   },
   async createSession({ token, userId }) {
     const s = { token, userId, createdAt: new Date() };
@@ -341,6 +355,7 @@ const store = {
   createUser: pick(mongoStore.createUser, memStore.createUser),
   findUserByUsername: pick(mongoStore.findUserByUsername, memStore.findUserByUsername),
   findUserById: pick(mongoStore.findUserById, memStore.findUserById),
+  updateUser: pick(mongoStore.updateUser, memStore.updateUser),
   createSession: pick(mongoStore.createSession, memStore.createSession),
   findSession: pick(mongoStore.findSession, memStore.findSession),
   deleteSession: pick(mongoStore.deleteSession, memStore.deleteSession),

@@ -58,6 +58,7 @@ const state = {
   draft: null,
   demo: false,
   username: '',
+  goal: 3,
   flashId: null,
   pendingId: null,
 };
@@ -202,6 +203,7 @@ function saveDataCache() {
       gyms: state.gyms,
       exercises: state.exercises,
       workouts: state.workouts,
+      goal: state.goal,
     }));
   } catch (e) { /* espaço cheio: ignora */ }
 }
@@ -213,6 +215,7 @@ function fillFromDataCache() {
     if (!state.gyms.length && Array.isArray(d.gyms)) state.gyms = d.gyms;
     if (!state.exercises.length && Array.isArray(d.exercises)) state.exercises = d.exercises;
     if (!state.workouts.length && Array.isArray(d.workouts)) state.workouts = d.workouts;
+    if (d.goal) state.goal = d.goal;
     buildLastPerf();
   } catch (e) { /* cache corrompido: ignora */ }
 }
@@ -639,17 +642,25 @@ function renderTreino() {
 
   if (!d) {
     const now = Date.now();
-    // estatísticas da academia selecionada
-    const week = state.workouts.filter((w) =>
-      now - new Date(w.date).getTime() < 7 * 864e5 &&
-      (w.gymId ? w.gymId === state.gymId : !state.gymId));
-    const weekVol = week.reduce((t, w) => t + (w.volume || 0), 0);
-    const weekSets = week.reduce((t, w) => t + (w.items || []).reduce((s, i) => s + (i.sets || []).length, 0), 0);
+    // treinos dos últimos 7 dias (todas as academias — a meta é de dias treinados)
+    const week = state.workouts.filter((w) => now - new Date(w.date).getTime() < 7 * 864e5);
+    const done = week.length;
+    const goal = state.goal;
+    const batida = done >= goal;
+    const restam = Math.max(0, goal - done);
     const lastForGym = state.workouts.find((w) => (w.gymId ? w.gymId === state.gymId : !state.gymId));
     const hasLast = !!lastForGym;
     const gymChips = state.gyms.map((g) =>
       `<button class="group-chip ${g.id === state.gymId ? 'sel' : ''}" data-action="sel-gym" data-arg="${esc(g.id)}">${esc(g.name)}</button>`
     ).join('');
+    // bolinhas da meta: cheias (laranja) até "done"; extras além da meta em destaque
+    const dots = [];
+    const total = Math.max(goal, done);
+    for (let i = 0; i < total; i++) {
+      const cheio = i < done;
+      const extra = i >= goal;
+      dots.push(`<span class="goal-dot ${cheio ? 'cheio' : ''} ${extra ? 'extra' : ''}">${cheio ? icon('check') : ''}</span>`);
+    }
     host.innerHTML = `
       <section class="card start-card">
         <div class="start-icon">${icon('dumbbell')}</div>
@@ -662,12 +673,19 @@ function renderTreino() {
         <button class="btn-primary" data-action="start-workout">${icon('play')} Iniciar treino</button>
         ${hasLast ? '<button class="btn-ghost" data-action="repeat-last">Repetir último treino</button>' : ''}
       </section>
-      ${queueBannerHtml()}
-      <div class="stat-row">
-        <div class="stat"><b>${week.length}</b><span>treinos / 7 dias</span></div>
-        <div class="stat"><b>${fmtKg(weekVol)}</b><span>kg levantados</span></div>
-        <div class="stat"><b>${weekSets}</b><span>séries</span></div>
-      </div>`;
+      <section class="card goal-card">
+        <div class="goal-head">
+          <div class="goal-info">
+            <span class="goal-title">Meta da semana</span>
+            <span class="goal-sub ${batida ? 'hit' : ''}">${batida
+              ? `Meta batida${done > goal ? ` e superada (${done})` : ''}! 🎉`
+              : `${done} de ${goal} · ${restam === 1 ? 'falta 1 treino' : `faltam ${restam} treinos`}`}</span>
+          </div>
+          <button class="goal-edit" data-action="goal-edit" aria-label="Editar meta">${icon('edit')}</button>
+        </div>
+        <div class="goal-dots">${dots.join('')}</div>
+      </section>
+      ${queueBannerHtml()}`;
     return;
   }
 
@@ -1176,6 +1194,28 @@ document.addEventListener('click', (e) => {
       syncQueue();
       break;
 
+    case 'goal-edit': {
+      const chips = [1, 2, 3, 4, 5, 6, 7].map((n) =>
+        `<button class="group-chip ${n === state.goal ? 'sel' : ''}" data-action="goal-set" data-arg="${n}">${n}x</button>`
+      ).join('');
+      openSheet(sheetShell('Meta semanal', `
+        <p style="font-size:14px;color:var(--muted);margin:0 2px 12px">Quantos dias por semana você se propõe a treinar?</p>
+        <div class="group-chips" style="justify-content:center">${chips}</div>
+        <button class="btn-ghost" data-action="close-sheet" style="margin-top:16px">Fechar</button>`));
+      break;
+    }
+
+    case 'goal-set': {
+      const goal = Number(arg);
+      state.goal = goal;
+      saveDataCache();
+      renderTreino();
+      api('/api/users/me', { method: 'PUT', body: JSON.stringify({ weeklyGoal: goal }) })
+        .then(() => showToast(`Meta definida: ${goal}x por semana. Foco! 🔥`, true))
+        .catch(() => showToast('Meta alterada só neste aparelho (sem conexão).'));
+      break;
+    }
+
     case 'user-menu':
       openSheet(sheetShell(`Olá, ${state.username}!`, `
         <p style="font-size:14px;color:var(--muted);line-height:1.5;margin:0 2px 4px">
@@ -1318,7 +1358,10 @@ async function doAuth() {
     setToken(out.token);
     hideAuth();
     state.username = out.username;
+    state.goal = 3;
     await bootData();
+    // busca a meta salva da conta (cadastro novo usa o padrão 3)
+    api('/api/auth/me').then((me) => { if (me.weeklyGoal) { state.goal = me.weeklyGoal; renderTreino(); } }).catch(() => {});
     renderAll();
     showToast(authState.mode === 'login'
       ? `Bem-vindo de volta, ${out.username}! 💪`
@@ -1361,6 +1404,7 @@ async function bootData() {
   try {
     const me = await api('/api/auth/me');
     state.username = me.username;
+    state.goal = me.weeklyGoal || 3;
     await bootData();
     renderAll();
   } catch (e) {

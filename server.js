@@ -99,7 +99,15 @@ app.post('/api/auth/login', wrap(async (req, res) => {
 
 app.get('/api/auth/me', auth, wrap(async (req, res) => {
   const user = await store.findUserById(req.userId);
-  res.json({ username: user?.username ?? '' });
+  res.json({ username: user?.username ?? '', weeklyGoal: user?.weeklyGoal ?? 3 });
+}));
+
+// Meta semanal de treinos
+app.put('/api/users/me', auth, wrap(async (req, res) => {
+  const goal = clampInt(req.body?.weeklyGoal, 1, 7);
+  const updated = await store.updateUser(req.userId, { weeklyGoal: goal });
+  if (!updated) return bad(res, 'Usuário não encontrado.', 404);
+  res.json({ ok: true, weeklyGoal: updated.weeklyGoal ?? goal });
 }));
 
 app.post('/api/auth/logout', wrap(async (req, res) => {
