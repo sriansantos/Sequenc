@@ -350,11 +350,6 @@ function startWorkout(fromWorkout = null) {
   renderTreino();
 }
 
-function draftVolume() {
-  return (state.draft?.items || []).reduce((t, it) =>
-    t + it.sets.reduce((s, x) => s + parseNum(x.w) * parseNum(x.r), 0), 0);
-}
-
 function draftSetCount() {
   return (state.draft?.items || []).reduce((t, it) => t + it.sets.length, 0);
 }
@@ -645,7 +640,6 @@ function openWorkoutDetailSheet(id) {
     <div class="totals">
       <span>${(w.items || []).length} exercícios</span>
       <span><b>${(w.items || []).reduce((t, i) => t + (i.sets || []).length, 0)}</b> séries</span>
-      <span>vol. <b>${fmtKg(w.volume || 0)} kg</b></span>
     </div>
     ${(w.items || []).map((it) => `
       <div class="detail-ex">
@@ -767,7 +761,6 @@ function renderTreino() {
         <span class="timer" id="draft-timer">${elapsed(Date.now() - d.startedAt)}</span>
         <span class="dot">·</span><span>${d.items.length} exercícios</span>
         <span class="dot">·</span><span>${draftSetCount()} séries</span>
-        <span class="dot">·</span><span>${fmtKg(draftVolume())} kg</span>
       </div>
     </section>
     ${itemsHtml}
@@ -865,7 +858,6 @@ function renderHistorico() {
           ${showGymTag && w.gymName ? `<span class="mini-chip accent">${esc(w.gymName)}</span>` : ''}
           <span class="mini-chip">${(w.items || []).length} exercícios</span>
           <span class="mini-chip">${sets} séries</span>
-          <span class="mini-chip accent">${fmtKg(w.volume || 0)} kg</span>
         </div>
       </button>`;
     }).join('') : `<div class="empty">${icon('clock')}<p>Nenhum treino nesta academia ainda.</p></div>`}`;
