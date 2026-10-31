@@ -25,7 +25,7 @@ npm install
 npm start
 ```
 
-Abra http://localhost:3000
+Abra http://localhost:3000 (localmente o `iniciar.bat` usa a porta 3050 para evitar conflito com outros programas)
 
 > Sem `MONGODB_URI` o app roda em **modo demo** (dados em memória, perfeitos para testar).
 > Com `MONGODB_URI` definida, tudo é salvo no MongoDB.

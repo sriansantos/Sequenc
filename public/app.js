@@ -502,6 +502,9 @@ function openExerciseDetailSheet(id) {
     <div class="detail-rows">${rows}</div>
     <button class="btn-ghost" data-action="ex-edit" data-arg="${esc(id)}" style="margin-top:14px">
       <span style="display:flex;align-items:center;justify-content:center;gap:8px">${icon('edit')} Renomear</span>
+    </button>
+    <button class="btn-danger" data-action="ex-del-ask" data-arg="${esc(id)}" style="margin-top:10px">
+      <span style="display:flex;align-items:center;justify-content:center;gap:8px">${icon('trash')} Excluir exercício</span>
     </button>`;
   openSheet(sheetShell(ex.name, body));
 }
@@ -1210,7 +1213,7 @@ document.addEventListener('click', (e) => {
       break;
 
     case 'ex-del-ask':
-      state.pendingId = sheetState.editId;
+      state.pendingId = btn.dataset.arg || sheetState.editId;
       confirmSheet({
         title: 'Excluir exercício?',
         msg: 'O exercício será removido da lista. Treinos antigos continuam com o histórico dele.',
