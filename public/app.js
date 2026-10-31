@@ -65,7 +65,7 @@ const state = {
   pendingId: null,
 };
 
-const sheetState = { editId: null, group: 'Outros', addedIds: new Set(), gymId: null, editGymId: null, showAll: false };
+const sheetState = { editId: null, group: 'Outros', addedIds: new Set(), gymId: null, editGymId: null, showAll: false, returnToPicker: false };
 
 // ---------- Helpers ----------
 const $ = (s) => document.querySelector(s);
@@ -409,6 +409,7 @@ function confirmSheet({ title, msg, action, label, okClass = 'btn-danger', arg }
 // ---------- Sheets: exercício ----------
 function openNewExerciseSheet(editId = null) {
   sheetState.editId = editId;
+  sheetState.returnToPicker = false; // só é ligado quando o pedido vem do seletor
   const editing = editId ? state.exercises.find((e) => e.id === editId) : null;
   sheetState.group = editing ? editing.group : 'Outros';
   // academia padrão: a do exercício editado, do filtro atual ou a selecionada
@@ -588,17 +589,24 @@ function openPickerSheet() {
   repairDraft(); // academia do treino pode ter deixado de existir
   sheetState.addedIds = new Set((state.draft?.items || []).map((i) => i.exerciseId));
   sheetState.showAll = false;
+  openSheet(sheetShell('Adicionar exercício', ''));
+  buildPickerBody('');
+}
+
+// Reconstrói o conteúdo do seletor em um sheet já aberto (após criar/excluir exercício)
+function buildPickerBody(term) {
   const gymLabel = state.draft?.gymName || 'Todas as academias';
   const body = `
     <div style="margin:0 2px 10px"><span class="chip">${esc(gymLabel)}</span></div>
     <div class="search-wrap">
       ${icon('search')}
-      <input class="search" id="picker-q" placeholder="Buscar exercício" autocomplete="off">
+      <input class="search" id="picker-q" placeholder="Buscar exercício" value="${esc(term)}" autocomplete="off">
     </div>
+    <button class="btn-dashed" data-action="new-ex-in-picker" style="height:46px;margin-bottom:10px">${icon('plus')} Criar novo exercício</button>
     <div id="picker-list"></div>
     <button class="btn-primary" data-action="close-sheet">Concluir</button>`;
-  openSheet(sheetShell('Adicionar exercício', body));
-  renderPickerList('');
+  $('#sheet-content').innerHTML = sheetShell('Adicionar exercício', body);
+  renderPickerList(term);
   $('#picker-q').addEventListener('input', (e) => renderPickerList(e.target.value));
 }
 
@@ -634,13 +642,13 @@ function renderPickerList(q) {
       ${items.map((e) => {
         const added = sheetState.addedIds.has(e.id);
         const perf = bestSetLabel(e.id);
-        return `<button class="ex-row" data-action="pick-add" data-arg="${esc(e.id)}" style="${added ? 'opacity:.55' : ''}">
+        return `<div class="ex-row" data-action="pick-add" data-arg="${esc(e.id)}" role="button" ${added ? 'style="opacity:.55"' : ''}>
           <span class="name">${esc(e.name)}</span>
           <span class="right">
             ${perf ? `<span class="perf">${esc(perf)}</span>` : ''}
-            ${added ? icon('check') : ''}
+            ${added ? icon('check') : `<button class="mini-del" data-action="picker-del" data-arg="${esc(e.id)}" aria-label="Excluir exercício">${icon('trash')}</button>`}
           </span>
-        </button>`;
+        </div>`;
       }).join('')}`;
   }).join('');
 }
@@ -1062,6 +1070,20 @@ async function saveExercise() {
     } else {
       const created = await api('/api/exercises', { method: 'POST', body: JSON.stringify(payload) });
       state.exercises.push(created);
+      // criado a partir do seletor: entra direto no treino em andamento
+      if (sheetState.returnToPicker && state.draft && !state.draft.items.some((i) => i.exerciseId === created.id)) {
+        state.draft.items.push({ exerciseId: created.id, name: created.name, group: created.group, sets: [{ w: '', r: '' }] });
+        saveDraft();
+        sheetState.returnToPicker = false;
+        sheetState.addedIds.add(created.id);
+        state.exercises.sort((a, b) =>
+          GROUPS.indexOf(a.group) - GROUPS.indexOf(b.group) || a.name.localeCompare(b.name, 'pt-BR'));
+        buildPickerBody('');
+        renderAll();
+        renderTop();
+        showToast('Exercício criado e adicionado ao treino! 💪', true);
+        return;
+      }
       showToast('Exercício adicionado.', true);
     }
     state.exercises.sort((a, b) =>
@@ -1125,6 +1147,39 @@ document.addEventListener('click', (e) => {
       renderPickerList(term);
       break;
     }
+
+    case 'new-ex-in-picker':
+      openNewExerciseSheet();
+      sheetState.returnToPicker = true; // volta para o seletor ao salvar
+      break;
+
+    case 'picker-del':
+      state.pendingId = arg;
+      confirmSheet({
+        title: 'Excluir exercício?',
+        msg: `"${arg ? (state.exercises.find((x) => x.id === arg)?.name ?? 'Este exercício') : 'Este exercício'}" será removido da lista. Treinos antigos continuam com o histórico dele.`,
+        action: 'picker-del-yes',
+        label: 'Excluir',
+      });
+      break;
+
+    case 'picker-del-yes':
+      guardAsync(btn, async () => {
+        try {
+          const id = state.pendingId || btn.dataset.arg;
+          await api(`/api/exercises/${id}`, { method: 'DELETE' });
+          state.exercises = state.exercises.filter((x) => x.id !== id);
+          sheetState.addedIds.delete(id);
+          if (state.draft) {
+            state.draft.items = state.draft.items.filter((i) => i.exerciseId !== id);
+            saveDraft();
+          }
+          renderAll();
+          buildPickerBody($('#picker-q')?.value || '');
+          showToast('Exercício excluído.');
+        } catch (err) { showToast(err.message); }
+      });
+      break;
 
     case 'pick-group': {
       sheetState.group = arg;
