@@ -29,6 +29,7 @@ const ICONS = {
   plus: '<path d="M12 5v14"/><path d="M5 12h14"/>',
   x: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>',
   check: '<path d="M4 12l5 5L20 7"/>',
+  refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
   chev: '<path d="M9 6l6 6-6 6"/>',
   chevUp: '<path d="M18 15l-6-6-6 6"/>',
   chevDown: '<path d="M6 9l6 6 6-6"/>',
@@ -61,6 +62,8 @@ const state = {
   demo: false,
   username: '',
   goal: 3,
+  lastRefresh: 0,
+  refreshing: false,
   flashId: null,
   pendingId: null,
 };
@@ -833,10 +836,15 @@ function renderExercicios() {
       }).join('')}`;
   }).join('');
 
+  const inCooldown = Date.now() - state.lastRefresh < REFRESH_COOLDOWN;
   host.innerHTML = `
-    <div class="search-wrap">
-      ${icon('search')}
-      <input class="search" id="ex-search" placeholder="Buscar exercício" value="${esc(searchQ)}" autocomplete="off">
+    <div class="search-row">
+      <div class="search-wrap">
+        ${icon('search')}
+        <input class="search" id="ex-search" placeholder="Buscar exercício" value="${esc(searchQ)}" autocomplete="off">
+      </div>
+      <button class="refresh-btn ${state.refreshing ? 'spin' : ''} ${inCooldown ? 'cooling' : ''}"
+              id="refresh-btn" data-action="refresh-lists" aria-label="Atualizar listas">${icon('refresh')}</button>
     </div>
     ${gymFilterChips(state.gymFilter, 'filter-gym')}
     ${state.exercises.length === 0
@@ -943,6 +951,37 @@ function isNetworkError(e) {
     e.name === 'TimeoutError' ||
     e.name === 'AbortError'
   );
+}
+
+// ---------- Atualização manual (botão de refresh) ----------
+const REFRESH_COOLDOWN = 15000; // 15s entre atualizações
+
+async function refreshLists() {
+  if (state.refreshing) return;
+  const agora = Date.now();
+  const falta = REFRESH_COOLDOWN - (agora - state.lastRefresh);
+  if (falta > 0) {
+    showToast(`Aguarde ${Math.ceil(falta / 1000)}s para atualizar de novo.`);
+    return;
+  }
+  if (!navigator.onLine) {
+    showToast('Sem internet — mostrando os dados salvos no aparelho.');
+    return;
+  }
+  state.refreshing = true;
+  renderExercicios();
+  state.lastRefresh = agora; // marca a tentativa: cooldown vale mesmo se falhar
+  try {
+    await Promise.all([loadGyms(), loadExercises(), loadWorkouts()]);
+    renderAll();
+    showToast('Listas atualizadas. ✅', true);
+  } catch (e) {
+    if (isNetworkError(e)) showToast('Não foi possível atualizar. Verifique a conexão.');
+    else showToast(e.message);
+  } finally {
+    state.refreshing = false;
+    renderExercicios();
+  }
 }
 
 // ---------- Estado de conexão ----------
@@ -1179,6 +1218,10 @@ document.addEventListener('click', (e) => {
           showToast('Exercício excluído.');
         } catch (err) { showToast(err.message); }
       });
+      break;
+
+    case 'refresh-lists':
+      guardAsync(btn, () => refreshLists());
       break;
 
     case 'pick-group': {
@@ -1473,10 +1516,12 @@ $('#auth-go').addEventListener('click', doAuth);
 [$('#auth-user'), $('#auth-pass')].forEach((el) =>
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAuth(); }));
 
-// atualiza timer do treino a cada segundo
+// atualiza timer do treino a cada segundo + libera o botão de refresh após o cooldown
 setInterval(() => {
   const el = $('#draft-timer');
   if (el && state.draft) el.textContent = elapsed(Date.now() - state.draft.startedAt);
+  const rb = $('#refresh-btn');
+  if (rb) rb.classList.toggle('cooling', Date.now() - state.lastRefresh < REFRESH_COOLDOWN);
 }, 1000);
 
 // recarrega dados quando o app volta do segundo plano

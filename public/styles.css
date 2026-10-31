@@ -340,6 +340,25 @@ main {
   color: var(--accent);
 }
 
+/* ============ Atualizar listas ============ */
+.search-row { display: flex; gap: 8px; margin-bottom: 6px; }
+.search-row .search-wrap { flex: 1; margin-bottom: 0; }
+.refresh-btn {
+  width: 44px; height: 44px;
+  border-radius: 13px;
+  background: var(--field);
+  border: 1px solid var(--border-2);
+  color: var(--accent);
+  display: grid; place-items: center;
+  flex-shrink: 0;
+  transition: opacity 0.2s ease, transform 0.12s ease;
+}
+.refresh-btn:active { transform: scale(0.94); }
+.refresh-btn svg { width: 18px; height: 18px; }
+.refresh-btn.spin svg { animation: rodar 0.8s linear infinite; }
+.refresh-btn.cooling { opacity: 0.35; }
+@keyframes rodar { to { transform: rotate(360deg); } }
+
 /* ============ Estado de conexão ============ */
 .conn-pill {
   position: fixed; left: 50%; transform: translateX(-50%);
