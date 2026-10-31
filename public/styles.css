@@ -359,6 +359,11 @@ main {
 .refresh-btn.cooling { opacity: 0.35; }
 @keyframes rodar { to { transform: rotate(360deg); } }
 
+/* refresh compacto dentro dos títulos de seção */
+.sec-title .refresh-btn { width: 30px; height: 30px; border-radius: 9px; margin-left: auto; }
+.sec-title .refresh-btn svg { width: 14px; height: 14px; }
+.sec-title.tpl-sec { align-items: center; }
+
 /* ============ Estado de conexão ============ */
 .conn-pill {
   position: fixed; left: 50%; transform: translateX(-50%);

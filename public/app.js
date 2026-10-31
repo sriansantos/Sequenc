@@ -703,8 +703,12 @@ function renderTreino() {
       dots.push(`<span class="goal-dot ${cheio ? 'cheio' : ''} ${extra ? 'extra' : ''}">${cheio ? icon('check') : ''}</span>`);
     }
     const templates = latestWorkoutTypes();
+    const coolingNow = Date.now() - state.lastRefresh < REFRESH_COOLDOWN;
     const templatesHtml = templates.length ? `
-      <div class="sec-title">${icon('play')} Seus treinos</div>
+      <div class="sec-title tpl-sec">${icon('play')} Seus treinos
+        <button class="refresh-btn ${state.refreshing ? 'spin' : ''} ${coolingNow ? 'cooling' : ''}"
+                data-action="refresh-lists" aria-label="Atualizar treinos">${icon('refresh')}</button>
+      </div>
       ${templates.map((w) => {
         const exCount = (w.items || []).length;
         return `
@@ -969,7 +973,7 @@ async function refreshLists() {
     return;
   }
   state.refreshing = true;
-  renderExercicios();
+  renderAll();
   state.lastRefresh = agora; // marca a tentativa: cooldown vale mesmo se falhar
   try {
     await Promise.all([loadGyms(), loadExercises(), loadWorkouts()]);
@@ -980,7 +984,7 @@ async function refreshLists() {
     else showToast(e.message);
   } finally {
     state.refreshing = false;
-    renderExercicios();
+    renderAll();
   }
 }
 
@@ -1516,12 +1520,12 @@ $('#auth-go').addEventListener('click', doAuth);
 [$('#auth-user'), $('#auth-pass')].forEach((el) =>
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter') doAuth(); }));
 
-// atualiza timer do treino a cada segundo + libera o botão de refresh após o cooldown
+// atualiza timer do treino a cada segundo + libera os botões de refresh após o cooldown
 setInterval(() => {
   const el = $('#draft-timer');
   if (el && state.draft) el.textContent = elapsed(Date.now() - state.draft.startedAt);
-  const rb = $('#refresh-btn');
-  if (rb) rb.classList.toggle('cooling', Date.now() - state.lastRefresh < REFRESH_COOLDOWN);
+  const falta = Date.now() - state.lastRefresh < REFRESH_COOLDOWN;
+  document.querySelectorAll('.refresh-btn').forEach((rb) => rb.classList.toggle('cooling', falta));
 }, 1000);
 
 // recarrega dados quando o app volta do segundo plano
