@@ -30,6 +30,7 @@ const ICONS = {
   x: '<path d="M6 6l12 12"/><path d="M18 6L6 18"/>',
   check: '<path d="M4 12l5 5L20 7"/>',
   refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
+  refresh: '<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>',
   chev: '<path d="M9 6l6 6-6 6"/>',
   chevUp: '<path d="M18 15l-6-6-6 6"/>',
   chevDown: '<path d="M6 9l6 6 6-6"/>',
@@ -77,6 +78,17 @@ function esc(s) {
   return String(s ?? '').replace(/[&<>"']/g, (c) => ({
     '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
   }[c]));
+}
+
+// Destaca em laranja o trecho pesquisado dentro do nome do exercício
+function hl(name, term) {
+  const t = (term || '').trim();
+  if (!t) return esc(name);
+  const i = name.toLowerCase().indexOf(t.toLowerCase());
+  if (i === -1) return esc(name);
+  return esc(name.slice(0, i)) +
+    '<mark class="hl">' + esc(name.slice(i, i + t.length)) + '</mark>' +
+    esc(name.slice(i + t.length));
 }
 
 function parseNum(str) {
@@ -383,6 +395,10 @@ function openSheet(html) {
 function closeSheet() {
   const sheet = $('#sheet');
   const backdrop = $('#backdrop');
+  // limpa ajustes feitos para o teclado do iPhone
+  sheet.style.transform = '';
+  sheet.style.maxHeight = '';
+  $('#sheet-content')?.querySelector('input')?.blur();
   sheet.classList.remove('open');
   backdrop.classList.remove('show');
   setTimeout(() => {
@@ -599,11 +615,16 @@ function openPickerSheet() {
 // Reconstrói o conteúdo do seletor em um sheet já aberto (após criar/excluir exercício)
 function buildPickerBody(term) {
   const gymLabel = state.draft?.gymName || 'Todas as academias';
+  const inCooldown = Date.now() - state.lastRefresh < REFRESH_COOLDOWN;
   const body = `
     <div style="margin:0 2px 10px"><span class="chip">${esc(gymLabel)}</span></div>
-    <div class="search-wrap">
-      ${icon('search')}
-      <input class="search" id="picker-q" placeholder="Buscar exercício" value="${esc(term)}" autocomplete="off">
+    <div class="search-row">
+      <div class="search-wrap">
+        ${icon('search')}
+        <input class="search" id="picker-q" placeholder="Buscar exercício" value="${esc(term)}" autocomplete="off">
+      </div>
+      <button class="refresh-btn ${state.refreshing ? 'spin' : ''} ${inCooldown ? 'cooling' : ''}"
+              data-action="refresh-lists" aria-label="Atualizar lista de exercícios">${icon('refresh')}</button>
     </div>
     <button class="btn-dashed" data-action="new-ex-in-picker" style="height:46px;margin-bottom:10px">${icon('plus')} Criar novo exercício</button>
     <div id="picker-list"></div>
@@ -637,7 +658,10 @@ function renderPickerList(q) {
     host.innerHTML = `<div class="empty">${icon('search')}<p>${msg}</p></div>`;
     return;
   }
-  host.innerHTML = GROUPS.map((g) => {
+  const contagem = term
+    ? `<div class="res-count">${list.length} resultado${list.length > 1 ? 's' : ''} para "<b>${esc(q.trim())}</b>"</div>`
+    : '';
+  host.innerHTML = contagem + GROUPS.map((g) => {
     const items = list.filter((e) => e.group === g);
     if (!items.length) return '';
     return `
@@ -646,7 +670,7 @@ function renderPickerList(q) {
         const added = sheetState.addedIds.has(e.id);
         const perf = bestSetLabel(e.id);
         return `<div class="ex-row" data-action="pick-add" data-arg="${esc(e.id)}" role="button" ${added ? 'style="opacity:.55"' : ''}>
-          <span class="name">${esc(e.name)}</span>
+          <span class="name">${hl(e.name, term)}</span>
           <span class="right">
             ${perf ? `<span class="perf">${esc(perf)}</span>` : ''}
             ${added ? icon('check') : `<button class="mini-del" data-action="picker-del" data-arg="${esc(e.id)}" aria-label="Excluir exercício">${icon('trash')}</button>`}
@@ -974,10 +998,12 @@ async function refreshLists() {
   }
   state.refreshing = true;
   renderAll();
+  syncPickerIfOpen();
   state.lastRefresh = agora; // marca a tentativa: cooldown vale mesmo se falhar
   try {
     await Promise.all([loadGyms(), loadExercises(), loadWorkouts()]);
     renderAll();
+    syncPickerIfOpen();
     showToast('Listas atualizadas. ✅', true);
   } catch (e) {
     if (isNetworkError(e)) showToast('Não foi possível atualizar. Verifique a conexão.');
@@ -985,6 +1011,15 @@ async function refreshLists() {
   } finally {
     state.refreshing = false;
     renderAll();
+    syncPickerIfOpen();
+  }
+}
+
+// Se o seletor de exercícios estiver aberto, reconstrói o corpo dele
+// (usado pelo refresh para o botão girar e a lista se atualizar no lugar)
+function syncPickerIfOpen() {
+  if (document.querySelector('#picker-list')) {
+    buildPickerBody($('#picker-q')?.value || '');
   }
 }
 
@@ -1603,6 +1638,29 @@ async function doAuth() {
     $('#auth-go').disabled = false;
   }
 }
+
+// Teclado do iPhone: quando abre, encolhe o sheet e o sobe para que a
+// busca (e os resultados) continuem visíveis em vez de ficarem atrás do teclado
+function fitSheetToKeyboard() {
+  const sheet = $('#sheet');
+  if (!sheet || sheet.hidden) return;
+  const vv = window.visualViewport;
+  const kb = vv ? Math.max(0, Math.round(window.innerHeight - vv.height)) : 0;
+  if (kb > 100 && sheet.classList.contains('open')) {
+    sheet.style.maxHeight = Math.max(220, Math.round(vv.height) - 10) + 'px';
+    sheet.style.transform = `translateY(${-kb}px)`;
+    const body = sheet.querySelector('.sheet-body');
+    if (body) body.scrollTop = 0; // garante a busca no topo, acima do teclado
+  } else {
+    sheet.style.maxHeight = '';
+    sheet.style.transform = '';
+  }
+}
+if (window.visualViewport) {
+  window.visualViewport.addEventListener('resize', fitSheetToKeyboard);
+  window.visualViewport.addEventListener('scroll', fitSheetToKeyboard);
+}
+window.__fitSheet = fitSheetToKeyboard; // usado nos testes automatizados
 
 // ---------- Boot ----------
 async function bootData() {
